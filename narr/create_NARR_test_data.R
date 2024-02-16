@@ -3,7 +3,7 @@
 # NARR test data set
 # https://pjbartlein.github.io/REarthSysSci/netCDF.html#create-and-write-a-projected-netcdf-file
 
-setwd("/Volumes/manwareme/amadeus/tests/testdata/narr/")
+setwd("~/amadeus/tests/testdata/narr/")
 library(ncdf4)
 library(terra)
 

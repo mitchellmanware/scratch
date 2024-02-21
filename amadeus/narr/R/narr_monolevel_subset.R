@@ -38,7 +38,7 @@ variable <- "weasd"
 
 #####
 # open raw netCDF
-ncin <- nc_open(in_path)
+ncin <- nc_open(in_name)
 # inspect contents
 print(ncin)
 
@@ -195,7 +195,7 @@ proj_def <- ncvar_def(
 # create new netCDF file with weasd, longitude, latitude, and projection
 # variable definitions (creates slot for variable but does not create the variable)
 ncout <- nc_create(
-  out_path,
+  out_name,
   list(weasd_def, lon_def, lat_def, proj_def),
   force_v4 = FALSE
   )
@@ -287,4 +287,4 @@ nc_close(ncin)
 
 #####
 # read new netCDF with `terra`
-terra::rast(out_path)
+terra::rast(out_name)

@@ -38,14 +38,7 @@ variable <- "omega"
 
 #####
 # open raw netCDF
-ncin <- nc_open(in_path)
-# inspect contents
-print(ncin)
-
-
-#####
-# open raw netCDF
-ncin <- nc_open(in_path)
+ncin <- nc_open(in_name)
 # inspect contents
 print(ncin)
 
@@ -215,12 +208,12 @@ proj_def <- ncvar_def(
 # create new netCDF file with omega, longitude, latitude, and projection
 # variable definitions (creates slot for variable but does not create the variable)
 ncout <- nc_create(
-  out_path,
+  out_name,
   list(omega_def, lon_def, lat_def, proj_def),
   force_v4 = FALSE
 )
 # put variables
-ncvar_put(ncout,omega_def,omegam_array)
+ncvar_put(ncout, omega_def, omega_array)
 ncvar_put(ncout, lon_def, lon)
 ncvar_put(ncout, lat_def, lat)
 
@@ -306,4 +299,4 @@ nc_close(ncin)
 
 #####
 # read new netCDF with `terra`
-terra::rast(out_path)
+terra::rast(out_name)

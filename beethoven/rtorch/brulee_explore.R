@@ -56,10 +56,9 @@ fit_manual <- brulee::brulee_mlp(
   geos_recipe,
   data = train,
   epochs = 10,
-  hidden_units = c(16, 32, 64),
+  hidden_units = c(2, 2),
   activation = "relu",
-  learn_rate = 0.01,
-  validation = 0.2
+  learn_rate = 0.01
 )
 
 # predict with test data
@@ -87,16 +86,18 @@ geos_folds
 
 # create tuning grid with hyperparameter selections
 geos_grid <- expand.grid(
-  hidden_units = c(16, 32, 64),
+  hidden_units = list(c(8, 8), c(8, 16), c(16, 16)),
   epochs = c(25, 50, 75, 100),
   learn_rate = c(0.001, 0.005, 0.01)
 )
+geos_grid
 
 geos_grid <- expand.grid(
-  hidden_units = c(16),
+  hidden_units = list(c(2, 2), c(2, 4)),
   epochs = c(25),
-  learn_rate = c(0.009, 0.01)
+  learn_rate = c(0.01)
 )
+geos_grid
 
 # initate mlp parsnip
 # use brulee engine
@@ -122,12 +123,14 @@ geos_tune <- tune_grid(
 )
 
 geos_best <- tune::select_best(geos_tune, metric = "rmse")
+geos_best$hidden_units
 
 cat("Best model:\n")
 print(geos_best)
 
 
 geos_best_list <- as.list(geos_best)
+geos_best_list$hidden_units <- unlist(geos_best_list$hidden_units)
 geos_best_list
 
 geos_finalize <- finalize_workflow(geos_workflow, geos_best_list)
@@ -135,7 +138,9 @@ geos_finalize
 
 geos_mlp_finalize <- parsnip::fit(geos_finalize, train)
 
-geos_pred <- predict(geos_mlp_finalize, test)
+geos_pred <-
+  predict(geos_mlp_finalize, test) |>
+  bind_cols(test)
 geos_pred
 
 ggplot(
@@ -149,3 +154,53 @@ workflows::addre
 
 
 show_engines("mlp")
+
+# run new function
+base_mlp(
+  recipe = geos_recipe,
+  train = train,
+  test = test,
+  epochs = c(5, 10),
+  hidden_units = list(c(2, 2), c(4, 4)),
+  activation = "relu",
+  learn_rate = 0.01,
+  folds = 5,
+  importance = "permutation",
+  engine = "brulee",
+  outcome = "regression"
+)
+
+
+params <- list(
+  hidden_units = tune::tune(),
+  activation = tune::tune(),
+  epochs = tune::tune(),
+  learn_rate = tune::tune()
+)
+engine <- "brulee"
+outcome <- "regression"
+importance <- "permutation"
+
+geos_mlp <- mlp(
+  params
+) %>%
+  set_engine("brulee", importance = "permutation") %>%
+  set_mode("regression")
+
+
+run_mlp <- function(params, engine, outcome, importance) {
+  mlp <- do.call(
+    parsnip::mlp,
+    params
+  ) |>
+    set_engine(engine = engine, importance = importance) |>
+    set_mode(outcome)
+    
+  return(mlp)
+}
+run_mlp(p, engine, outcome, importance)
+
+unlist(p)
+
+
+

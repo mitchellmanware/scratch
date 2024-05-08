@@ -91,12 +91,12 @@ base_mlp <- function(
 
   cat(
     paste0(
-      "Fitting model(s) with ",
+      "Fitting ",
       nrow(mlp_grid),
-      " unique combinations of hyperparameters...\n"
+      " models with unique hyperparameter combinations...\n"
     )
   )
-  
+
   # apply tuning grid to workflow
   mlp_tune <- tune::tune_grid(
     mlp_workflow,
@@ -107,7 +107,7 @@ base_mlp <- function(
   cat("Selecting optimal hyperparameters...\n")
 
   # select best hyperparameters
-  mlp_best <- tune::select_best(mlp_tune, method = "rmse")
+  mlp_best <- tune::select_best(mlp_tune, metric = "rmse")
   cat("Optimal hyperparameters:\n")
   print(mlp_best)
 
@@ -119,7 +119,7 @@ base_mlp <- function(
 
   # apply best hyperparameters to new workflow
   mlp_workflow_best <- mlp_workflow |>
-    workflows::finalize_workflow(mlp_best_list)
+    tune::finalize_workflow(mlp_best_list)
 
   # fit best model
   mlp_fit_best <- parsnip::fit(mlp_workflow_best, train)
@@ -139,7 +139,7 @@ base_mlp(
   recipe = geos_recipe,
   train = train,
   test = test,
-  epochs = c(5, 10),
+  epochs = 5,
   hidden_units = list(c(2, 2), c(4, 4)),
   activation = "relu",
   learn_rate = 0.01,

@@ -3,3 +3,9 @@ amadeus/narr/data/raw/
 
 # sample covariate data
 amadeus/rtorch/data
+
+# amadeus
+amadeus/
+
+# mlp example data
+beethoven/rtorch/data/

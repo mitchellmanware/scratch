@@ -14,6 +14,7 @@ library(tune)
 library(caret)
 library(tidymodels)
 library(workflows)
+library(rsample)
 
 # check torch install
 torch::install_torch()
@@ -91,6 +92,12 @@ geos_grid <- expand.grid(
   learn_rate = c(0.001, 0.005, 0.01)
 )
 
+geos_grid <- expand.grid(
+  hidden_units = c(16),
+  epochs = c(25),
+  learn_rate = c(0.009, 0.01)
+)
+
 # initate mlp parsnip
 # use brulee engine
 geos_mlp <- mlp(
@@ -114,11 +121,31 @@ geos_tune <- tune_grid(
   grid = geos_grid
 )
 
-?mlp
+geos_best <- tune::select_best(geos_tune, metric = "rmse")
+
+cat("Best model:\n")
+print(geos_best)
 
 
+geos_best_list <- as.list(geos_best)
+geos_best_list
+
+geos_finalize <- finalize_workflow(geos_workflow, geos_best_list)
+geos_finalize
+
+geos_mlp_finalize <- parsnip::fit(geos_finalize, train)
+
+geos_pred <- predict(geos_mlp_finalize, test)
+geos_pred
+
+ggplot(
+  data = geos_pred,
+  aes(x = .pred, y = pm2.5)
+) +
+  geom_abline(col = "#3f7ba6") +
+  geom_point(alpha = 0.3)
+
+workflows::addre
 
 
 show_engines("mlp")
-
-

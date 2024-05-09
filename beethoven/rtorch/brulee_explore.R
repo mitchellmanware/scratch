@@ -15,6 +15,7 @@ library(caret)
 library(tidymodels)
 library(workflows)
 library(rsample)
+library(dplyr)
 
 # check torch install
 torch::install_torch()
@@ -150,57 +151,17 @@ ggplot(
   geom_abline(col = "#3f7ba6") +
   geom_point(alpha = 0.3)
 
-workflows::addre
-
-
-show_engines("mlp")
-
-# run new function
-base_mlp(
+# implement new function with sample data (geos covariates only)
+geos_mlp <- base_mlp(
   recipe = geos_recipe,
   train = train,
   test = test,
-  epochs = c(5, 10),
+  epochs = 5,
   hidden_units = list(c(2, 2), c(4, 4)),
   activation = "relu",
   learn_rate = 0.01,
   folds = 5,
-  importance = "permutation",
+  importance = "permutations",
   engine = "brulee",
   outcome = "regression"
 )
-
-
-params <- list(
-  hidden_units = tune::tune(),
-  activation = tune::tune(),
-  epochs = tune::tune(),
-  learn_rate = tune::tune()
-)
-engine <- "brulee"
-outcome <- "regression"
-importance <- "permutation"
-
-geos_mlp <- mlp(
-  params
-) %>%
-  set_engine("brulee", importance = "permutation") %>%
-  set_mode("regression")
-
-
-run_mlp <- function(params, engine, outcome, importance) {
-  mlp <- do.call(
-    parsnip::mlp,
-    params
-  ) |>
-    set_engine(engine = engine, importance = importance) |>
-    set_mode(outcome)
-    
-  return(mlp)
-}
-run_mlp(p, engine, outcome, importance)
-
-unlist(p)
-
-
-

@@ -14,6 +14,7 @@
 #' @param importance
 #' @param engine
 #' @param outcome
+#' @param metric
 #' @param ...
 #' @importFrom rsample vfold_cv
 #' @importFrom parsnip mlp
@@ -43,12 +44,16 @@ base_mlp <- function(
   importance,
   engine = c("keras", "nnet", "brulee"),
   outcome = c("regression", "classification"),
+  metric,
   ...
 ) {
   # check inputs
   stopifnot(methods::is(recipe, "recipe"))
   stopifnot(methods::is(train, "data.frame"))
   stopifnot(methods::is(test, "data.frame"))
+  stopifnot(activation %in% c("relu"))
+  stopifnot(engine %in% c("keras", "nnet", "brulee"))
+  stopifnot(outcome %in% c("regression", "classification"))
 
   # set folds cross validation
   mlp_folds <- rsample::vfold_cv(train, v = folds)
@@ -72,6 +77,10 @@ base_mlp <- function(
     }
   )
 
+  cat(
+    "Initializing multilayer perceptron model with tunable hyperparameters...\n"
+  )
+
   # intiate multilayer perceptron with tunable parameters
   mlp_fit <- do.call(
     parsnip::mlp,
@@ -80,14 +89,12 @@ base_mlp <- function(
     parsnip::set_engine(engine = engine, importance = importance) |>
     parsnip::set_mode(outcome)
 
-  cat("Multilayer perceptron model initialized with tunable parameters...\n")
+  cat("Applying recipe to model workflow...\n")
 
   # implement recipe to `mlp_fit` with `workflows::workflow`
   mlp_workflow <- workflows::workflow() |>
     workflows::add_recipe(recipe) |>
     workflows::add_model(mlp_fit)
-
-  cat("Recipe applied to model workflow...\n")
 
   cat(
     paste0(
@@ -107,7 +114,7 @@ base_mlp <- function(
   cat("Selecting optimal hyperparameters...\n")
 
   # select best hyperparameters
-  mlp_best <- tune::select_best(mlp_tune, metric = "rmse")
+  mlp_best <- tune::select_best(mlp_tune, metric = metric)
   cat("Optimal hyperparameters:\n")
   print(mlp_best)
 
@@ -115,7 +122,7 @@ base_mlp <- function(
   mlp_best_list <- as.list(mlp_best)
   mlp_best_list$hidden_units <- unlist(mlp_best_list$hidden_units)
 
-  cat("Refitting model with optimal hyperparamters...]n")
+  cat("Refitting model with optimal hyperparamters...\n")
 
   # apply best hyperparameters to new workflow
   mlp_workflow_best <- mlp_workflow |>
@@ -124,27 +131,12 @@ base_mlp <- function(
   # fit best model
   mlp_fit_best <- parsnip::fit(mlp_workflow_best, train)
 
-  cat("Predicting outcomes with refit model and test data...n")
+  cat("Predicting outcomes with refit model and test data...\n")
 
   # predict with test data
   mlp_prediction <- predict(mlp_fit_best, test) |>
     dplyr::bind_cols(test)
 
   # return prediction results
-  return(mlp_prediction)
+  return(list(mlp_workflow_best, mlp_prediction))
 }
-
-# implement new function with sample data (geos covariates only)
-base_mlp(
-  recipe = geos_recipe,
-  train = train,
-  test = test,
-  epochs = 5,
-  hidden_units = list(c(2, 2), c(4, 4)),
-  activation = "relu",
-  learn_rate = 0.01,
-  folds = 5,
-  importance = "permutations",
-  engine = "brulee",
-  outcome = "regression"
-)

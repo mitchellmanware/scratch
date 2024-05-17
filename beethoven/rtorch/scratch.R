@@ -25,12 +25,15 @@ plot(beethoven_proj$geometry, add = TRUE)
 
 nrow(beethoven_proj)
 
+beethoven_proj <- beethoven_proj %>%
+  mutate(site_id = as.factor(site_id))
+
 beethoven_folds <- spatial_clustering_cv(
   beethoven_proj[1:10000, ],
   v = 10
 )
 
-beethoven_train <- training(beethoven_folds)
+
 
 extract_splits <- function(spatial_cv) {
   splits <- spatial_cv$splits
@@ -50,7 +53,6 @@ head(beethoven_train)
 beethoven_test <- folds[[1]]$test_data
 beethoven_test <- st_drop_geometry(beethoven_test)
 
-?assessment
+nrow(beethoven_train)
+class(beethoven_train$site_id)
 class(beethoven_train$time)
-?step_time
-?step_timeseries

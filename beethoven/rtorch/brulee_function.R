@@ -41,6 +41,11 @@ base_mlp <- function(
   hidden_units = list(c(8, 8), c(8, 16), c(16, 16)),
   activation = c("relu"),
   learn_rate = c(0.01, 0.005, 0.001),
+  cv = c(
+    "spatial_clustering_cv", "spatial_block_cv",
+    "spatial_leave_location_out_cv", "spatial_buffer_vfold_cv",
+    "spatial_nndm_cv"
+  ),
   folds = 5,
   importance,
   engine = c("keras", "nnet", "brulee"),
@@ -58,13 +63,11 @@ base_mlp <- function(
   stopifnot(engine %in% c("keras", "nnet", "brulee"))
   stopifnot(outcome %in% c("regression", "classification"))
 
-  # split train and test data
-  # train_i <- sample(nrow(data), size = floor(0.8 * nrow(data)))
-  # train <- data[train_i, ]
-  # test <- data[-train_i, ]
-
   # set folds cross validation
-  mlp_folds <- rsample::vfold_cv(train, v = folds)
+  mlp_folds <- do.call(
+    cv,
+    list(data = train, v = folds)
+  )
 
   # create tuning grid
   mlp_grid <- expand.grid(
@@ -137,12 +140,12 @@ base_mlp <- function(
     tune::finalize_workflow(mlp_best_list)
 
   # fit best model
-  mlp_fit_best <- parsnip::fit(mlp_workflow_best, train)
+  mlp_fit_best <- parsnip::fit(mlp_workflow_best, sf::st_drop_geometry(train))
 
   cat("Predicting outcomes with refit model and test data...\n")
 
   # predict with test data
-  mlp_prediction <- predict(mlp_fit_best, test) |>
+  mlp_prediction <- predict(mlp_fit_best, sf::st_drop_geometry(test)) |>
     dplyr::bind_cols(test)
 
   # return prediction results
@@ -183,4 +186,14 @@ st_recipe <- function(
     recipes::step_normalize(all_predictors())
 
   return(recipe_prepared)
+}
+
+extract_splits <- function(spatial_cv) {
+  splits <- spatial_cv$splits
+  folds <- lapply(splits, function(split) {
+    train_data <- rsample::training(split)
+    test_data <- rsample::testing(split)
+    list(train_data = train_data, test_data = test_data)
+  })
+  return(folds)
 }

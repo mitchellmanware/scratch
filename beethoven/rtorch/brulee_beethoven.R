@@ -23,58 +23,61 @@ getwd()
 source("./beethoven/rtorch/brulee_function.R")
 
 # import covariate data (all but NDVI data)
-beethoven_data <- readRDS("./beethoven/rtorch/data/beethoven_data.rds")
+beethoven_data <- sf::st_as_sf(
+  readRDS("./beethoven/rtorch/data/beethoven_geom.rds"),
+  coords = c("lon", "lat"),
+  crs = 4326
+)
+
+# site identifiers as factor
+beethoven_data <- beethoven_data |>
+  mutate(site_id = as.factor(site_id))
 
 # remove columns with missing data
 beethoven_data <- beethoven_data[, !colSums(is.na(beethoven_data)) > 0]
 
-# sample for local development
-sample_id <- sample(unique(beethoven_data$site_id), 20)
-beethoven_sample <- beethoven_data[
-  beethoven_data$site_id %in% sample_id,
-]
-nrow(beethoven_sample)
-ncol(beethoven_sample)
+# prepare training and testing data
+beethoven_folds <- spatial_clustering_cv(
+  beethoven_data,
+  v = 10
+)
+beethoven_split <- extract_splits(beethoven_folds)
+beethoven_train_sf <- beethoven_split[[1]]$train_data
+beethoven_test_sf <- beethoven_split[[2]]$test_data
 
 # build recipe
-beethoven_recipe <- recipe(beethoven_train, pm2.5 ~ .) |>
-  update_role(site_id, new_role = "ID") |>
-  update_role(pm2.5, new_role = "outcome") |>
-  step_time(time) |>
+beethoven_recipe <- recipe(
+  pm2.5 ~ .,
+  data = st_drop_geometry(beethoven_train_sf)
+) |>
+  step_date(
+    time,
+    features = c("dow", "month", "year"),
+    keep_original_cols = FALSE
+  ) |>
+  step_mutate(time_year = as.factor(time_year)) |>
+  step_dummy(time_dow, time_month, time_year, site_id) |>
   step_zv(all_predictors()) |>
-  step_normalize(all_predictors())
-
+  step_normalize(all_numeric_predictors())
 print(beethoven_recipe$var_info, n = nrow(beethoven_recipe$var_info))
 
 # set hyperparameters
-epochs <- c(100, 150, 200, 250)
+epochs <- c(200, 250)
 hidden_units <- list(
-  c(16, 16), c(16, 32), c(32, 32), c(32, 64), c(64, 64)
-)
-learn_rate <- c(0.01, 0.005, 0.001)
-
-expand.grid(
-  epochs,
-  hidden_units,
-  learn_rate
-)
-
-epochs <- c(100)
-hidden_units <- list(
-  c(16, 16), c(32, 32)
+  c(16, 16)
 )
 learn_rate <- c(0.01)
-
 
 # implement new function with sample data
 beethoven_mlp <- base_mlp(
   recipe = beethoven_recipe,
-  train = beethoven_train,
-  test = beethoven_test,
+  train = beethoven_train_sf,
+  test = beethoven_test_sf,
   epochs = epochs,
   hidden_units = hidden_units,
   activation = "relu",
   learn_rate = learn_rate,
+  cv = "spatial_clustering_cv",
   folds = 5,
   importance = "permutations",
   engine = "brulee",

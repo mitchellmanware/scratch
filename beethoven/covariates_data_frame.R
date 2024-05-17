@@ -15,8 +15,13 @@ covariates_data_frame <-
     for (c in seq_along(covariates)) {
       # import data from rds files
       if (type %in% c("rds", "RDS", ".rds", ".RDS")) {
-        data <- readRDS(covariates[c])
         # import data from R objects
+        data <- readRDS(covariates[c])
+        data[, "site_id"] <- as.character(data[, "site_id"])
+        data[, "site_id"] <-
+          stringr::str_pad(
+            data[, "site_id"], pad = "0", side = "left", width = 14
+          )
       } else {
         data <- covariates[[c]]
       }
@@ -50,6 +55,20 @@ covariates_data_frame <-
         # rename ".x" columns from merge
         colnames(covariates_df) <- gsub(".x", "", colnames(covariates_df))
       }
+      # unique names
+      cat(
+       paste0(
+         "File: ",
+          gsub(
+            "/ddn/gs1/group/set/Projects/NRT-AP-Model/output/",
+            "",
+            covariates[c]
+          ),
+          " - ",
+          length(unique(covariates_df$site_id)),
+          "\n"
+        )
+      )
     }
     # retain only one identifier column
     drop_id <- c("merge", "lon", "lat", "geom", "year", "date")
@@ -60,7 +79,7 @@ covariates_data_frame <-
       return(data.frame(covariates_df_1))
     } else if (!is.null(sample)) {
       sample_locs <- sample(
-        covariates_df_1[,id],
+        covariates_df_1[, id],
         size = sample,
         replace = FALSE)
       covariates_sample <- covariates_df_1[
@@ -87,7 +106,7 @@ covariates_time <-
       years <- as.integer(unique(data$year))
       data_dates <- NULL
       for (y in seq_along(years)) {
-        data_year <- data[data$year == years[y]]
+        data_year <- data[data$year == years[y], ]
         dates_year <- seq(
           as.Date(paste0(years[y], "-01-01")),
           as.Date(paste0(years[y], "-12-31")),
@@ -95,6 +114,7 @@ covariates_time <-
         )
         data_merge <- merge(dates_year, data_year)
         colnames(data_merge)[1] <- "time"
+        data_merge <- data_merge[, -which(names(data_merge) == "year")]
         data_dates <- rbind(data_dates, data_merge)
       }
       return(data.frame(data_dates))

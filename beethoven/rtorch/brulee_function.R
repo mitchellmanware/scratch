@@ -16,6 +16,7 @@
 #' @param outcome
 #' @param metric
 #' @param ...
+#' @importFrom methods is
 #' @importFrom rsample vfold_cv
 #' @importFrom parsnip mlp
 #' @importFrom tune tune
@@ -49,11 +50,18 @@ base_mlp <- function(
 ) {
   # check inputs
   stopifnot(methods::is(recipe, "recipe"))
-  stopifnot(methods::is(train, "data.frame"))
-  stopifnot(methods::is(test, "data.frame"))
+  stopifnot(
+    methods::is(train, "data.frame"),
+    methods::is(test, "data.frame")
+  )
   stopifnot(activation %in% c("relu"))
   stopifnot(engine %in% c("keras", "nnet", "brulee"))
   stopifnot(outcome %in% c("regression", "classification"))
+
+  # split train and test data
+  # train_i <- sample(nrow(data), size = floor(0.8 * nrow(data)))
+  # train <- data[train_i, ]
+  # test <- data[-train_i, ]
 
   # set folds cross validation
   mlp_folds <- rsample::vfold_cv(train, v = folds)
@@ -100,7 +108,7 @@ base_mlp <- function(
     paste0(
       "Fitting ",
       nrow(mlp_grid),
-      " models with unique hyperparameter combinations...\n"
+      " unique models...\n"
     )
   )
 
@@ -139,4 +147,40 @@ base_mlp <- function(
 
   # return prediction results
   return(list(mlp_workflow_best, mlp_prediction))
+}
+
+#' Prepare spatiotemporal recipe
+#' @description
+#' Prepare a spatiotemporal recipe with the `recipes` package for use in a
+#' multilayer perceptron.
+#' @param data
+#' @param outcome_id character
+#' @param locs_id character
+#' @param time_id character
+#' @author Mitchell Manware
+#' @importFrom methods is
+#' @importFrom recipes recipe
+#' @returns
+#' @export
+st_recipe <- function(
+  data,
+  outcome_id,
+  locs_id,
+  time_id = "time"
+) {
+  # check inputs
+  stopifnot(methods::is(data, "data.frame"))
+  stopifnot(methods::is(c(locs_id, time_id), "character"))
+
+  # create recipe
+  recipe_prepared <- recipes::recipe(
+    data = data,
+    as.formula(paste(outcome_id, "~ ."))
+  ) |>
+    recipes::update_role(time_id, locs_id, new_role = "ID") |>
+    recipes::update_role(outcome_id, new_role = "outcome") |>
+    recipes::step_zv(all_predictors()) |>
+    recipes::step_normalize(all_predictors())
+
+  return(recipe_prepared)
 }

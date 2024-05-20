@@ -69,6 +69,9 @@ base_mlp <- function(
     list(data = train, v = folds)
   )
 
+  # drop "cluster" column after cv sampling
+  train <- train |> dplyr::select(-cluster)
+
   # create tuning grid
   mlp_grid <- expand.grid(
     list(
@@ -149,21 +152,23 @@ base_mlp <- function(
     dplyr::bind_cols(test)
 
   # return prediction results
-  return(list(mlp_workflow_best, mlp_prediction))
+  return(list(mlp_workflow_best, mlp_fit_best, mlp_prediction))
 }
 
 #' Prepare spatiotemporal recipe
 #' @description
 #' Prepare a spatiotemporal recipe with the `recipes` package for use in a
 #' multilayer perceptron.
-#' @param data
-#' @param outcome_id character
-#' @param locs_id character
-#' @param time_id character
+#' @param data A `data.frame` or `sf` object containing the dataset to be
+#' preprocessed.
+#' @param outcome_id character(1). Name of the outcome variable.
+#' @param locs_id character(1). Name of the location identifier variable.
+#' @param time_id character(1). Name of the time identifier variable.
+#' Defaults to "time".
+#' @return A `recipe` object
 #' @author Mitchell Manware
 #' @importFrom methods is
-#' @importFrom recipes recipe
-#' @returns
+#' @import recipes
 #' @export
 st_recipe <- function(
   data,
@@ -171,6 +176,11 @@ st_recipe <- function(
   locs_id,
   time_id = "time"
 ) {
+  # drop geometry if sf
+  if (methods::is(data, "sf")) {
+    data <- sf::st_drop_geometry(data)
+  }
+
   # check inputs
   stopifnot(methods::is(data, "data.frame"))
   stopifnot(methods::is(c(locs_id, time_id), "character"))
@@ -180,12 +190,24 @@ st_recipe <- function(
     data = data,
     as.formula(paste(outcome_id, "~ ."))
   ) |>
-    recipes::update_role(time_id, locs_id, new_role = "ID") |>
-    recipes::update_role(outcome_id, new_role = "outcome") |>
-    recipes::step_zv(all_predictors()) |>
-    recipes::step_normalize(all_predictors())
+    recipes::step_mutate(time_year = as.factor(time_year)) |>
+    recipes::step_dummy(time_dow, time_month, time_year, site_id) |>
+    recipes::step_zv(recipes::all_predictors()) |>
+    recipes::step_normalize(recipes::all_numeric_predictors())
 
+  # return recipe
   return(recipe_prepared)
+}
+
+create_spatial_clusters <- function(data, n_clusters) {
+  kmeans_result <- kmeans(sf::st_coordinates(data), centers = n_clusters)
+  data$cluster <- kmeans_result$cluster
+  return(data)
+}
+
+spatial_clustering_cv_manual <- function(data, v) {
+  folds <- rsample::group_vfold_cv(data, group = "cluster", v = v)
+  return(folds)
 }
 
 extract_splits <- function(spatial_cv) {
@@ -193,6 +215,11 @@ extract_splits <- function(spatial_cv) {
   folds <- lapply(splits, function(split) {
     train_data <- rsample::training(split)
     test_data <- rsample::testing(split)
+    
+    # Remove "cluster" column from training and testing data
+    # train_data <- train_data |> dplyr::select(-cluster)
+    test_data <- test_data |> dplyr::select(-cluster)
+    
     list(train_data = train_data, test_data = test_data)
   })
   return(folds)

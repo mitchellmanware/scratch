@@ -5,54 +5,96 @@ getwd()
 source("./beethoven/rtorch/brulee_function.R")
 source("./beethoven/covariates_data_frame.R")
 
-beethoven_locs <- readRDS("./beethoven/rtorch/data/beethoven_geom.rds")
+mlps <- list.files("./beethoven/rtorch/data/model_output/", full.names = TRUE)
+mlps
+beethoven_mlp <- readRDS(mlps[5])
 
-beethoven_sf <- sf::st_as_sf(
-  beethoven_locs,
-  coords = c("lon", "lat"),
-  crs = 4326
+# inspect performance
+yardstick::metrics(beethoven_mlp[[2]], pm2.5, .pred)
+
+# inspect model
+beethoven_mlp[[1]]
+head(beethoven_mlp[[2]])
+nrow(beethoven_mlp[[2]])
+length(unique(beethoven_mlp[[2]]$site_id))
+
+beethoven_obs_pred <- data.frame(
+  pm2.5 = beethoven_mlp[[2]]$pm2.5,
+  pred = beethoven_mlp[[2]]$.pred
 )
-beethoven_sf
-beethoven_proj <- sf::st_transform(beethoven_sf, 5070)
-plot(beethoven_proj$geometry)
-
-us <- tigris::states(cb = TRUE)
-us <- us[us$NAME %in% c(state.name, "District of Columbia"), ]
-us <- us[!us$NAME %in% c("Alaska", "Hawaii"), ]
-us_proj <- sf::st_transform(us, 5070)
-plot(us_proj$geometry)
-plot(beethoven_proj$geometry, add = TRUE)
-
-nrow(beethoven_proj)
-
-beethoven_proj <- beethoven_proj %>%
-  mutate(site_id = as.factor(site_id))
-
-beethoven_folds <- spatial_clustering_cv(
-  beethoven_proj[1:10000, ],
-  v = 10
-)
+head(beethoven_obs_pred)
 
 
+ggplot(
+  data = beethoven_mlp[[2]],
+  aes(x = pm2.5, y = .pred)
+) +
+  geom_pointdensity() +
+  scale_color_gradientn(
+    colors = matlab.like(11),
+    name = "Density Estimation"
+  ) +
+  geom_smooth(method = "lm", se = TRUE, col = "black") +
+  labs(
+    x = "Observed PM2.5",
+    y = "Predicted PM2.5"
+  ) +
+  theme_pubr() +
+  theme(legend.position = "right")
 
-extract_splits <- function(spatial_cv) {
-  splits <- spatial_cv$splits
-  folds <- lapply(splits, function(split) {
-    train_data <- rsample::training(split)
-    test_data <- rsample::testing(split)
-    list(train_data = train_data, test_data = test_data)
-  })
-  return(folds)
-}
+beethoven_mlp[[2]]
 
-folds <- extract_splits(beethoven_folds)
+beethoven_mlp
 
-beethoven_train <- folds[[1]]$train_data
-beethoven_train <- st_drop_geometry(beethoven_train)
-head(beethoven_train)
-beethoven_test <- folds[[1]]$test_data
-beethoven_test <- st_drop_geometry(beethoven_test)
+# model with simple fold cross validation
+beethoven_mlp_vfold <- readRDS(mlps[1])
 
-nrow(beethoven_train)
-class(beethoven_train$site_id)
-class(beethoven_train$time)
+# inspect performance
+yardstick::metrics(beethoven_mlp_vfold[[2]], pm2.5, .pred)
+
+# inspect model
+beethoven_mlp_vfold[[1]]
+head(beethoven_mlp_vfold[[2]])
+nrow(beethoven_mlp_vfold[[2]])
+length(unique(beethoven_mlp_vfold[[2]]$site_id))
+
+ggplot(
+  data = beethoven_mlp_vfold[[2]],
+  aes(x = pm2.5, y = .pred)
+) +
+  geom_pointdensity() +
+  scale_color_gradientn(
+    colors = matlab.like(11),
+    name = "Density Estimation"
+  ) +
+  geom_smooth(method = "lm", se = TRUE, col = "black") +
+  labs(
+    x = "Observed PM2.5",
+    y = "Predicted PM2.5"
+  ) +
+  theme_pubr() +
+  theme(legend.position = "right")
+
+ggplot(
+  data = beethoven_mlp_vfold[[2]],
+  aes(x = pm2.5, y = .pred)
+) +
+  geom_pointdensity() +
+  scale_color_gradientn(
+    colors = matlab.like(11),
+    name = "Density Estimation"
+  ) +
+  geom_smooth(method = "lm", se = TRUE, col = "black") +
+  labs(
+    x = "Observed PM2.5",
+    y = "Predicted PM2.5"
+  ) +
+  theme_pubr() +
+  theme(
+    legend.position = "right",
+    legend.title = element_text(size = 14),
+    legend.text = element_text(size = 15),
+    legend.key.size = unit(2, "lines"),
+    legend.key.height = unit(3, "lines"),
+    legend.key.width = unit(2, "lines")
+  )

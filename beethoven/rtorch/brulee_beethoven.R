@@ -1,6 +1,7 @@
 ###############################################################################
-# example utilizing `base_mlp` with covariates for 2018
+# example utilizing `base_mlp` with covariates for January
 # packages
+library(sf)
 library(brulee)
 library(recipes)
 library(yardstick)
@@ -15,13 +16,14 @@ library(dplyr)
 library(ggpubr)
 library(ggpointdensity)
 library(viridis)
-library(spatialsample)
-library(sf)
 library(doParallel)
 library(colorRamps)
 
+# set working directory
 setwd("/ddn/gs1/home/manwareme/scratch")
 getwd()
+
+# source functions
 source("./beethoven/rtorch/brulee_function.R")
 
 # register cores
@@ -35,7 +37,7 @@ beethoven_data <- sf::st_as_sf(
 )
 
 # sample for local development
-beethoven_id <- sample(unique(beethoven_data$site_id), 500)
+beethoven_id <- sample(unique(beethoven_data$site_id), 100)
 beethoven_data <- beethoven_data[beethoven_data$site_id %in% beethoven_id, ]
 
 # site identifiers as factor
@@ -45,93 +47,93 @@ beethoven_data <- beethoven_data |>
 # remove columns with missing data
 beethoven_data <- beethoven_data[, !colSums(is.na(beethoven_data)) > 0]
 
-# manual spatial clustering
-n_clusters <- 5
-beethoven_cluster <- create_spatial_clusters(beethoven_data, n_clusters)
-beethoven_folds <- spatial_clustering_cv_manual(
-  beethoven_cluster,
-  v = n_clusters
+# spatial cross validation methods
+cv_type <- c("cluster", "block", "lolo", "buffer", "nndm")
+
+# hyperparameters
+beethoven_params <- list(
+  # cluster
+  c(cv = "cluster", folds = 5, n_clusters = 5),
+  # block
+  c(cv = "block", n_blocks = 5),
+  # lolo
+  c(cv = "lolo", locs_id = "site_id"),
+  # buffer
+  c(cv = "buffer", buffer_distance = 1, folds = 5),
+  # nndm
+  c(cv = "nndm", n_neighbors = 50, folds = 5)
 )
 
-# extract splits (and drop "cluster")
-beethoven_split <- extract_splits(beethoven_folds)
+# for loop to utilize all spatiotemoral cross validation methods
+for (c in seq_along(cv_type)) {
 
-# prepare train and test data
-beethoven_train_sf <- beethoven_split[[1]]$train_data
-beethoven_test_sf <- beethoven_split[[2]]$test_data
+  # split data according to cross validation type
+  # predict cannot predict values for factors it has not seen (?)
+  # if training does not include at least 1 date from 2022, all 2022 values
+  # are returned as NA -- exploring this error further now
+  beethoven_split <- temporal_split(
+    beethoven_data,
+    time_id = "time",
+    prop = 0.83
+  )
 
-# build recipe
-beethoven_recipe <- recipe(
-  pm2.5 ~ .,
-  data = st_drop_geometry(beethoven_train_sf) |> select(-cluster)
-) |>
-  step_date(
-    time,
-    features = c("dow", "month", "year"),
-    keep_original_cols = FALSE
-  ) |>
-  step_mutate(time_year = as.factor(time_year)) |>
-  step_dummy(time_dow, time_month, time_year, site_id) |>
-  step_zv(all_predictors()) |>
-  step_normalize(all_numeric_predictors())
-print(beethoven_recipe$var_info, n = nrow(beethoven_recipe$var_info))
+  # prepare train and test data
+  beethoven_train_sf <- beethoven_split[[1]]
+  beethoven_test_sf <- beethoven_split[[2]]
 
-# set hyperparameters
-epochs <- c(200, 250)
-hidden_units <- list(
-  c(16, 16), c(32, 32), c(64, 64)
-)
-learn_rate <- c(0.01)
+  # build recipe
+  beethoven_recipe <- st_recipe(
+    data = beethoven_train_sf,
+    outcome_id = "pm2.5",
+    locs_id = "site_id",
+    time_id = "time"
+  )
+  print(beethoven_recipe$var_info)
 
-# implement new function with sample data
-beethoven_mlp <- base_mlp(
-  recipe = beethoven_recipe,
-  train = beethoven_train_sf,
-  test = beethoven_test_sf,
-  epochs = epochs,
-  hidden_units = hidden_units,
-  activation = "relu",
-  learn_rate = learn_rate,
-  cv = "spatial_clustering_cv_manual",
-  folds = n_clusters - 1,
-  importance = "permutations",
-  engine = "brulee",
-  outcome = "regression",
-  metric = "rmse"
-)
+  # set hyperparameters
+  epochs <- c(500)
+  hidden_units <- list(c(16, 32, 16))
+  learn_rate <- c(0.01)
 
-# inspect performance
-yardstick::metrics(beethoven_mlp[[2]], pm2.5, .pred)
+  # fit mlp
+  beethoven_mlp <- do.call(
+    base_mlp,
+    c(
+      list(
+        recipe = beethoven_recipe,
+        train = beethoven_train_sf,
+        test = beethoven_test_sf,
+        epochs = epochs,
+        hidden_units = hidden_units,
+        activation = "relu",
+        learn_rate = learn_rate,
+        importance = "permutations",
+        engine = "brulee",
+        outcome = "regression",
+        metric = "rmse"
+      ),
+      beethoven_params[[c]]
+    )
+  )
 
-# inspect model
-beethoven_mlp[[1]]
-beethoven_mlp[[2]]
+  # inspect performance
+  yardstick::metrics(beethoven_mlp[[3]], pm2.5, .pred)
 
-# plot
-ggplot(
-  data = beethoven_mlp[[3]],
-  aes(x = pm2.5, y = .pred)
-) +
-  geom_pointdensity() +
-  scale_color_gradientn(
-    colors = matlab.like(11),
-    name = "Density Estimation"
-  ) +
-  geom_smooth(method = "lm", se = TRUE, col = "black") +
-  labs(
-    x = "Observed PM2.5",
-    y = "Predicted PM2.5"
-  ) +
-  theme_pubr() +
-  theme(legend.position = "right")
+  # inspect model
+  beethoven_mlp[[1]]
+  beethoven_mlp[[2]]
+  beethoven_mlp[[3]]
 
-# save
-beethoven_filename <- paste0(
-  "./beethoven/rtorch/data/model_output/beethoven_mlp_",
-  format(Sys.time(), "%Y%m%d_%H%M%S"),
-  ".rds"
-)
-saveRDS(
-  beethoven_mlp,
-  beethoven_filename
-)
+  # save
+  beethoven_filename <- paste0(
+    "./beethoven/rtorch/data/model_output/beethoven_mlp_",
+    cv_type[c],
+    "_",
+    format(Sys.time(), "%Y%m%d_%H%M%S"),
+    ".rds"
+  )
+  saveRDS(
+    beethoven_mlp,
+    beethoven_filename
+  )
+}

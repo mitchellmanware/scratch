@@ -239,18 +239,26 @@ st_recipe <- function(
   # check inputs
   stopifnot(methods::is(data, "data.frame"))
   stopifnot(methods::is(c(locs_id, time_id), "character"))
+  
+  # drop geometry
   if (methods::is(data, "sf")) {
     data <- sf::st_drop_geometry(data)
   }
 
+  # factorize location id
+  if (!class(data[[locs_id]]) == "factor") {
+    data <- data |> dplyr::mutate(!!locs_id := as.factor(!!sym(locs_id)))
+  }
+
   # remove cluster column if in data
   if ("cluster" %in% names(data)) {
-    data <- data |> dplyr::select(all_of(-cluster))
+    data <- data |> dplyr::select(dplyr::all_of(-cluster))
   }
+
   # create recipe
   recipe_prepared <- recipes::recipe(
-    data = data,
-    as.formula(paste(outcome_id, "~ ."))
+    as.formula(paste(outcome_id, "~ .")),
+    data = data
   )
 
   # prepare time as split factor
@@ -258,7 +266,7 @@ st_recipe <- function(
     stopifnot(methods::is(time_id, "character"))
     recipe_prepared <- recipe_prepared |>
       recipes::step_date(
-        time,
+        !!time_id,
         features = c("dow", "month", "year"),
         keep_original_cols = FALSE
       ) |>
@@ -316,8 +324,8 @@ block_cv_man <- function(
   # Assign blocks based on coordinates and block sizes
   data$block <- as.factor(
     floor((sf::st_coordinates(data)[, 1] - bbox["xmin"]) / x_block_size) +
-    floor((sf::st_coordinates(data)[, 2] - bbox["ymin"]) / y_block_size) *
-    as.numeric(n_blocks)
+      floor((sf::st_coordinates(data)[, 2] - bbox["ymin"]) / y_block_size) *
+        as.numeric(n_blocks)
   )
 
   # Perform group k-fold cross-validation based on the blocks
@@ -440,6 +448,11 @@ temporal_split <- function(
   stopifnot(methods::is(data, "data.frame"))
   stopifnot(prop > 0 & prop < 1)
 
+  # reclass time data as.Date
+  if (!class(data[[time_id]]) == "Date") {
+    data[[time_id]] <- as.Date(data[[time_id]])
+  }
+
   # extract time data
   time <- sort(unique(data[[time_id]]))
 
@@ -453,4 +466,25 @@ temporal_split <- function(
 
   # return
   return(list(train_data, test_data))
+}
+
+bootstrap <- function(
+  data,
+  p = 0.3,
+  n = 3
+) {
+  # fixed sample size (percentage)
+  size <- ceiling(nrow(data) * p)
+
+  # perform bootstraps
+  data_bootstraps <- list()
+  for (i in seq_len(n)) {
+    # perform boostrap
+    data_bootstraps[[i]] <- data[
+      sample(seq_len(nrow(data)), size = size, replace = TRUE),
+    ]
+  }
+
+  # return
+  return(data_bootstraps)
 }

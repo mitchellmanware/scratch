@@ -1,7 +1,6 @@
 ###############################################################################
 # example utilizing `base_mlp` with covariates for January
 # packages
-library(sf)
 library(brulee)
 library(recipes)
 library(yardstick)
@@ -18,63 +17,59 @@ library(ggpointdensity)
 library(viridis)
 library(doParallel)
 library(colorRamps)
+library(qs)
+library(rlang)
 
 # set working directory
-setwd("/ddn/gs1/home/manwareme/scratch")
-getwd()
+setwd("/ddn/gs1/home/manwareme/scratch/beethoven/rtorch/")
 
 # source functions
-source("./beethoven/rtorch/brulee_function.R")
+source("./brulee_function.R")
 
 # register cores
-registerDoParallel(cores = (Sys.getenv("SLURM_CPUS_PER_TASK")))
+registerDoParallel(cores = as.integer(Sys.getenv("SLURM_CPUS_PER_TASK") - 1))
 
-# import covariate data (excludes NDVI and TRI data)
-beethoven_data <- sf::st_as_sf(
-  readRDS("./beethoven/rtorch/data/beethoven_geom.rds"),
-  coords = c("lon", "lat"),
-  crs = 4326
+# import covariate data
+beethoven_file <- list.files(
+  "./data",
+  pattern = "sf_",
+  full.names = TRUE
 )
+beethoven_data <- qs::qread(beethoven_file)
 
-# sample for local development
-beethoven_id <- sample(unique(beethoven_data$site_id), 100)
-beethoven_data <- beethoven_data[beethoven_data$site_id %in% beethoven_id, ]
+# remove Event.Type
+if ("Event.Type" %in% names(beethoven_data)) {
+  beethoven_data <- beethoven_data |> select(-Event.Type)
+}
 
-# site identifiers as factor
-beethoven_data <- beethoven_data |>
-  mutate(site_id = as.factor(site_id))
-
-# remove columns with missing data
-beethoven_data <- beethoven_data[, !colSums(is.na(beethoven_data)) > 0]
-
-# spatial cross validation methods
-cv_type <- c("cluster", "block", "lolo", "buffer", "nndm")
-
-# hyperparameters
+# spatiotemporal cross validation methods
 beethoven_params <- list(
-  # cluster
-  c(cv = "cluster", folds = 5, n_clusters = 5),
-  # block
-  c(cv = "block", n_blocks = 5),
-  # lolo
-  c(cv = "lolo", locs_id = "site_id"),
-  # buffer
-  c(cv = "buffer", buffer_distance = 1, folds = 5),
-  # nndm
-  c(cv = "nndm", n_neighbors = 50, folds = 5)
+  # spatial cv method (cluster example)
+  c(cv = "cluster", folds = 5, n_clusters = 5)
+  # temporal cv method
+  # ...
+  # edge case cv method
+  # ...
 )
+
+# bootstrap data
+beethoven_bootstrap <- bootstrap(
+  beethoven_data,
+  p = 0.3,
+  n = length(beethoven_cv)
+)
+
+# initiate empty list for model storage
+beethoven_models <- list()
 
 # for loop to utilize all spatiotemoral cross validation methods
-for (c in seq_along(cv_type)) {
+for (b in seq_along(beethoven_bootstrap)) {
 
-  # split data according to cross validation type
-  # predict cannot predict values for factors it has not seen (?)
-  # if training does not include at least 1 date from 2022, all 2022 values
-  # are returned as NA -- exploring this error further now
+  # split data
   beethoven_split <- temporal_split(
-    beethoven_data,
+    beethoven_bootstrap[[b]],
     time_id = "time",
-    prop = 0.83
+    prop = 0.8
   )
 
   # prepare train and test data
@@ -84,15 +79,15 @@ for (c in seq_along(cv_type)) {
   # build recipe
   beethoven_recipe <- st_recipe(
     data = beethoven_train_sf,
-    outcome_id = "pm2.5",
+    outcome_id = "Arithmetic.Mean",
     locs_id = "site_id",
     time_id = "time"
   )
   print(beethoven_recipe$var_info)
 
   # set hyperparameters
-  epochs <- c(500)
-  hidden_units <- list(c(16, 32, 16))
+  epochs <- c(250, 500)
+  hidden_units <- list(c(16, 16), c(32, 32), c(64, 64))
   learn_rate <- c(0.01)
 
   # fit mlp
@@ -112,28 +107,31 @@ for (c in seq_along(cv_type)) {
         outcome = "regression",
         metric = "rmse"
       ),
-      beethoven_params[[c]]
+      beethoven_params[[b]]
     )
   )
 
   # inspect performance
-  yardstick::metrics(beethoven_mlp[[3]], pm2.5, .pred)
+  yardstick::metrics(beethoven_mlp[[3]], Arithmetic.Mean, .pred)
 
   # inspect model
   beethoven_mlp[[1]]
   beethoven_mlp[[2]]
   beethoven_mlp[[3]]
 
-  # save
-  beethoven_filename <- paste0(
-    "./beethoven/rtorch/data/model_output/beethoven_mlp_",
-    cv_type[c],
-    "_",
-    format(Sys.time(), "%Y%m%d_%H%M%S"),
-    ".rds"
-  )
-  saveRDS(
-    beethoven_mlp,
-    beethoven_filename
-  )
+  # store best model
+  beethoven_models[[b]] <- beethoven_mlp[[3]]
 }
+
+# RDS file path
+beethoven_filename <- paste0(
+  "./beethoven/rtorch/data/model_output/beethoven_mlp_",
+  format(Sys.time(), "%Y%m%d_%H%M%S"),
+  ".rds"
+)
+
+# save
+saveRDS(
+  beethoven_models,
+  beethoven_filename
+)

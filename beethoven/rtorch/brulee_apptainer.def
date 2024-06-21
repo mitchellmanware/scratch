@@ -1,0 +1,100 @@
+Bootstrap: docker
+From: ubuntu:20.04
+
+%post
+    # Set non-interactive mode for package installations
+    export DEBIAN_FRONTEND=noninteractive
+
+    # Update the package list and install required dependencies
+    apt-get update && apt-get install -y \
+    dirmngr \
+    gnupg \
+    apt-transport-https \
+    ca-certificates \
+    software-properties-common \
+    wget \
+    locales \
+    libopenblas-base \
+    libomp-dev \
+    libjpeg-dev \
+    libpng-dev \
+    libzmq3-dev \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libatlas-base-dev \
+    libopenmpi-dev \
+    libproj-dev \
+    libgeos-dev \
+    libgdal-dev \
+    libudunits2-dev \
+    libglpk-dev \
+    libgsl-dev \
+    libv8-dev \
+    libgit2-dev \
+    libssl-dev \
+    libxml2-dev \
+    libcairo2-dev \
+    libxt-dev \
+    libjpeg-dev \
+    libtiff5-dev \
+    libcurl4-openssl-dev \
+    libssl-dev \
+    libpq-dev \
+    libmysqlclient-dev \
+    unixodbc-dev \
+    libnetcdf-dev \
+    netcdf-bin \
+    libhdf5-dev \
+    libssh2-1-dev \
+    libglpk-dev \
+    libhiredis-dev \
+    libharfbuzz-dev \
+    libfribidi-dev \
+    libsqlite3-dev \
+    libglu1-mesa-dev \
+    libgraphviz-dev \
+    libmagick++-dev \
+    libprotobuf-dev \
+    protobuf-compiler \
+    libjq-dev \
+    libzmq3-dev
+
+    # Reset DEBIAN_FRONTEND to its default value
+    unset DEBIAN_FRONTEND
+    
+    # Add R repository and its key
+    wget -qO- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc | apt-key add -
+    add-apt-repository "deb https://cloud.r-project.org/bin/linux/ubuntu $(lsb_release -cs)-cran40/"
+    
+    # Update package list again
+    apt-get update
+
+    # Install R and dependencies
+    apt-get install -y --no-install-recommends \
+    r-base=4.3.2-1.2004.0 \
+    r-base-dev=4.3.2-1.2004.0 \
+    r-recommended=4.3.2-1.2004.0
+
+    # Set non-interactive mode for package installations
+    export DEBIAN_FRONTEND=noninteractive
+
+    # Install additional system dependencies for Torch and Lantern
+    apt-get install -y --no-install-recommends \
+    libopenblas-base \
+    libomp-dev \
+    libjpeg-dev \
+    libpng-dev \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libatlas-base-dev \
+    libopenmpi-dev
+
+    # Reset DEBIAN_FRONTEND to its default value
+    unset DEBIAN_FRONTEND
+
+    # Install SLURM client utilities
+    apt-get install -y slurm-client
+
+    # Install R packages
+    R -e "install.packages(c('brulee', 'recipes', 'yardstick', 'ggplot2', 'torch', 'tune', 'caret', 'tidymodels', 'workflows', 'rsample', 'dplyr', 'ggpubr', 'ggpointdensity', 'viridis', 'doParallel', 'colorRamps', 'qs', 'rlang', 'sf'), dependencies = TRUE)"
+    R -e "torch::install_torch()"

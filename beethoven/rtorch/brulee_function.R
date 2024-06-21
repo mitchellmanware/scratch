@@ -174,43 +174,43 @@ base_mlp <- function(
   )
 
   # create plot for performance visualization
-  mlp_plot <-
-    ggplot2::ggplot(
-      data = mlp_prediction,
-      aes(x = pm2.5, y = .pred)
-    ) +
-    ggpointdensity::geom_pointdensity() +
-    ggplot2::scale_color_gradientn(
-      colors = colorRamps::matlab.like(11),
-      name = "Density Estimation"
-    ) +
-    ggplot2::geom_smooth(method = "lm", se = TRUE, col = "black") +
-    ggplot2::labs(
-      x = "Observed PM2.5",
-      y = "Predicted PM2.5"
-    ) +
-    ggpubr::theme_pubr() +
-    ggplot2::theme(legend.position = "right") +
-    ggplot2::annotate(
-      "label",
-      x = 0,
-      y = Inf,
-      label = paste0(
-        "CV = ", cv,
-        "\nR² = ", round(mlp_performance[2, 3], 3),
-        "\nRMSE = ", round(mlp_performance[1, 3], 3),
-        "\nMAE = ", round(mlp_performance[3, 3], 3)
-      ),
-      hjust = 0,
-      vjust = 1.1,
-      size = 5,
-      color = "black",
-      fill = "white",
-      label.size = 0.5
-    )
+  # mlp_plot <-
+  #   ggplot2::ggplot(
+  #     data = mlp_prediction,
+  #     aes(x = pm2.5, y = .pred)
+  #   ) +
+  #   ggpointdensity::geom_pointdensity() +
+  #   ggplot2::scale_color_gradientn(
+  #     colors = colorRamps::matlab.like(11),
+  #     name = "Density Estimation"
+  #   ) +
+  #   ggplot2::geom_smooth(method = "lm", se = TRUE, col = "black") +
+  #   ggplot2::labs(
+  #     x = "Observed PM2.5",
+  #     y = "Predicted PM2.5"
+  #   ) +
+  #   ggpubr::theme_pubr() +
+  #   ggplot2::theme(legend.position = "right") +
+  #   ggplot2::annotate(
+  #     "label",
+  #     x = 0,
+  #     y = Inf,
+  #     label = paste0(
+  #       "CV = ", cv,
+  #       "\nR² = ", round(mlp_performance[2, 3], 3),
+  #       "\nRMSE = ", round(mlp_performance[1, 3], 3),
+  #       "\nMAE = ", round(mlp_performance[3, 3], 3)
+  #     ),
+  #     hjust = 0,
+  #     vjust = 1.1,
+  #     size = 5,
+  #     color = "black",
+  #     fill = "white",
+  #     label.size = 0.5
+  #   )
 
   # return prediction results
-  return(list(mlp_workflow_best, mlp_fit_best, mlp_prediction, mlp_plot))
+  return(list(mlp_workflow_best, mlp_fit_best, mlp_prediction))
 }
 
 #' Prepare spatiotemporal recipe
@@ -246,8 +246,8 @@ st_recipe <- function(
   }
 
   # factorize location id
-  if (!class(data[[locs_id]]) == "factor") {
-    data <- data |> dplyr::mutate(!!locs_id := as.factor(!!sym(locs_id)))
+  if (!inherits(data[[locs_id]], "factor")) {
+    data <- data |> dplyr::mutate(!!locs_id := as.factor(!!rlang::sym(locs_id)))
   }
 
   # remove cluster column if in data

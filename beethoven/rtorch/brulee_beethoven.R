@@ -1,5 +1,5 @@
 ###############################################################################
-# example utilizing `base_mlp` with covariates for January
+# example utilizing `base_mlp` with covariates
 # packages
 library(brulee)
 library(recipes)
@@ -12,13 +12,12 @@ library(tidymodels)
 library(workflows)
 library(rsample)
 library(dplyr)
-library(ggpubr)
-library(ggpointdensity)
 library(viridis)
 library(doParallel)
 library(colorRamps)
 library(qs)
 library(rlang)
+library(sf)
 
 # set working directory
 setwd("/ddn/gs1/home/manwareme/scratch/beethoven/rtorch/")
@@ -27,7 +26,7 @@ setwd("/ddn/gs1/home/manwareme/scratch/beethoven/rtorch/")
 source("./brulee_function.R")
 
 # register cores
-registerDoParallel(cores = as.integer(Sys.getenv("SLURM_CPUS_PER_TASK") - 1))
+registerDoParallel(cores = as.integer(Sys.getenv("SLURM_CPUS_PER_TASK")) - 1)
 
 # import covariate data
 beethoven_file <- list.files(
@@ -43,7 +42,7 @@ if ("Event.Type" %in% names(beethoven_data)) {
 }
 
 # spatiotemporal cross validation methods
-beethoven_params <- list(
+beethoven_cv <- list(
   # spatial cv method (cluster example)
   c(cv = "cluster", folds = 5, n_clusters = 5)
   # temporal cv method
@@ -55,7 +54,7 @@ beethoven_params <- list(
 # bootstrap data
 beethoven_bootstrap <- bootstrap(
   beethoven_data,
-  p = 0.3,
+  p = 0.1,
   n = length(beethoven_cv)
 )
 
@@ -65,6 +64,10 @@ beethoven_models <- list()
 # for loop to utilize all spatiotemoral cross validation methods
 for (b in seq_along(beethoven_bootstrap)) {
 
+  # time
+  beethoven_bootstrap[[b]]$time <-
+    as.Date(beethoven_bootstrap[[b]]$time)
+  
   # split data
   beethoven_split <- temporal_split(
     beethoven_bootstrap[[b]],
@@ -86,7 +89,7 @@ for (b in seq_along(beethoven_bootstrap)) {
   print(beethoven_recipe$var_info)
 
   # set hyperparameters
-  epochs <- c(250, 500)
+  epochs <- c(1000)
   hidden_units <- list(c(16, 16), c(32, 32), c(64, 64))
   learn_rate <- c(0.01)
 
@@ -107,7 +110,7 @@ for (b in seq_along(beethoven_bootstrap)) {
         outcome = "regression",
         metric = "rmse"
       ),
-      beethoven_params[[b]]
+      beethoven_cv[[b]]
     )
   )
 

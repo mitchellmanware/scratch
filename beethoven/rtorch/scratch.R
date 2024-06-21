@@ -14,7 +14,7 @@ source("./beethoven/rtorch/brulee_function.R")
 #### local development
 # import imputed covariate data
 beethoven_file <- list.files(
-  "./beethoven/rtorch/data",
+  "/ddn/gs1/group/set/Projects/NRT-AP-Model/output",
   pattern = "sf_",
   full.names = TRUE
 )

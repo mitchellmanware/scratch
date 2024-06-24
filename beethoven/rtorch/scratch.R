@@ -1,8 +1,9 @@
 # Mitchell Manware
-# June 12, 2024
+# June 24, 2024
 
 setwd("/ddn/gs1/home/manwareme/scratch/")
 getwd()
+.libPaths()
 
 # libraries
 library(brulee)

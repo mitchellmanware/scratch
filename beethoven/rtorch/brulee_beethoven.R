@@ -1,14 +1,15 @@
 ###############################################################################
 # example utilizing `base_mlp` with covariates
 # packages
+library(rlang)
+library(torch, lib.loc = .libPaths()[2])
+library(tidymodels)
 library(brulee)
 library(recipes)
 library(yardstick)
 library(ggplot2)
-library(torch)
 library(tune)
 library(caret)
-library(tidymodels)
 library(workflows)
 library(rsample)
 library(dplyr)
@@ -16,7 +17,7 @@ library(viridis)
 library(doParallel)
 library(colorRamps)
 library(qs)
-library(rlang)
+.libPaths(c("/ddn/gs1/biotools/R/lib64/R/custompkg", .libPaths()))
 library(sf)
 
 # set working directory
